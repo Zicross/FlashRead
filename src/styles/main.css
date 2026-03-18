@@ -1,0 +1,341 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f5f5f5;
+    color: #1a1a1a;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+/* Header */
+#header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+#header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+}
+
+#settingsToggle {
+    background: none;
+    border: 1px solid #e0e0e0;
+    font-size: 18px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s;
+}
+#settingsToggle:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+/* Settings Panel */
+#settingsPanel {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 16px 24px;
+}
+.settings-content {
+    max-width: 500px;
+}
+.settings-content h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.setting-row label {
+    font-size: 14px;
+    min-width: 80px;
+    color: #444;
+}
+.setting-row select,
+.setting-row input[type="password"] {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+}
+.loading-text {
+    font-size: 13px;
+    color: #888;
+}
+.progress-bar {
+    height: 4px;
+    background: #eee;
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: #000;
+    width: 0%;
+    transition: width 0.3s;
+    border-radius: 2px;
+}
+
+/* Main Layout */
+#main {
+    display: flex;
+    height: calc(100vh - 57px);
+}
+
+/* Reader Panel */
+#readerPanel {
+    flex: 0 0 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    overflow-y: auto;
+}
+
+#display {
+    font-size: 48px;
+    font-weight: 300;
+    text-align: center;
+    padding: 20px;
+    min-height: 100px;
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #e0e0e0;
+    background-color: #fafafa;
+    border-radius: 12px;
+    line-height: 1.2;
+    margin-bottom: 24px;
+    word-break: break-word;
+}
+
+/* Controls */
+#controls {
+    width: 100%;
+    max-width: 440px;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.control-row label {
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 70px;
+    color: #555;
+}
+
+.control-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    outline: none;
+}
+.control-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #000;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.control-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #000;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.control-row span {
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 70px;
+    text-align: right;
+    color: #888;
+}
+
+#fileName {
+    font-size: 13px;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* Toggles */
+.toggles {
+    gap: 20px;
+}
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.toggle-label input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 36px;
+    height: 20px;
+    background: #ddd;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.toggle-label input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+.toggle-label input[type="checkbox"]:checked {
+    background: #000;
+}
+.toggle-label input[type="checkbox"]:checked::after {
+    transform: translateX(16px);
+}
+
+/* Buttons */
+.buttons {
+    gap: 8px;
+}
+
+button {
+    padding: 8px 20px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background-color: #000;
+    color: #fff;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+button:hover { background-color: #333; }
+button:disabled {
+    background-color: #e0e0e0;
+    color: #999;
+    cursor: not-allowed;
+}
+
+#prevSentence, #nextSentence {
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+/* Viewer Panel */
+#viewerPanel {
+    flex: 1;
+    overflow: hidden;
+}
+
+#documentViewer {
+    height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+    background: #eee;
+}
+
+#pdfViewer canvas {
+    display: block;
+    margin: 0 auto 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#textViewer {
+    max-width: 700px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 32px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    font-size: 16px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+#textViewer .sentence {
+    transition: background-color 0.15s;
+    border-radius: 3px;
+    padding: 1px 0;
+}
+#textViewer .sentence.active {
+    background-color: rgba(255, 255, 0, 0.3);
+}
+#textViewer .word {
+    transition: background-color 0.1s;
+    border-radius: 2px;
+}
+#textViewer .word.active {
+    background-color: rgba(255, 200, 0, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #main {
+        flex-direction: column;
+    }
+    #readerPanel {
+        flex: none;
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 16px;
+    }
+    #viewerPanel {
+        flex: 1;
+    }
+    #display {
+        font-size: 36px;
+        min-height: 80px;
+    }
+}

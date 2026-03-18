@@ -1,10 +1,23 @@
 {
-  "name": "flashread-rsvp",
-  "version": "1.0.0",
-  "description": "A Rapid Serial Visual Presentation (RSVP) reader for PDFs",
-  "main": "index.html",
+  "name": "flashread",
+  "version": "2.0.0",
+  "description": "Multi-format RSVP reader with synchronized voice narration",
+  "type": "module",
   "scripts": {
-    "start": "vercel dev"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "epubjs": "^0.3.93",
+    "mammoth": "^1.8.0",
+    "pdfjs-dist": "^4.9.155"
+  },
+  "optionalDependencies": {
+    "piper-tts-web": "^1.1.2"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
   },
   "author": "",
   "license": "MIT"
