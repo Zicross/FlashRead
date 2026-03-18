@@ -155,6 +155,65 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ================================================================
+// Error banner
+// ================================================================
+
+function showError(message) {
+  // Remove any existing error banner
+  const existing = document.getElementById('error-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'error-banner';
+  banner.style.cssText = [
+    'position:fixed',
+    'top:var(--space-4)',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'background-color:#c0392b',
+    'color:#ffffff',
+    'border-radius:var(--radius-lg)',
+    'padding:var(--space-3) var(--space-5)',
+    'display:flex',
+    'align-items:center',
+    'gap:var(--space-4)',
+    'box-shadow:var(--shadow-md)',
+    'z-index:100',
+    'max-width:90vw',
+    'font-size:var(--text-sm)',
+    'cursor:pointer',
+  ].join(';');
+
+  const msg = document.createElement('span');
+  msg.textContent = message;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = [
+    'background:none',
+    'border:none',
+    'color:#ffffff',
+    'font-size:1rem',
+    'cursor:pointer',
+    'padding:0',
+    'line-height:1',
+    'flex-shrink:0',
+  ].join(';');
+  closeBtn.setAttribute('aria-label', 'Dismiss');
+
+  const dismiss = () => banner.remove();
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); dismiss(); });
+  banner.addEventListener('click', dismiss);
+
+  banner.appendChild(msg);
+  banner.appendChild(closeBtn);
+  document.body.appendChild(banner);
+
+  // Auto-dismiss after 8 seconds
+  setTimeout(() => { if (banner.isConnected) banner.remove(); }, 8000);
+}
+
+// ================================================================
 // File handling
 // ================================================================
 
@@ -188,6 +247,24 @@ async function handleFile(file) {
       rsvpView = new RsvpView(app.contentArea, engine, store);
     }
 
+    // Initialize TTS if voice is enabled; errors are non-blocking
+    if (store.getSettings().voiceEnabled) {
+      const compat = KokoroProvider.checkCompatibility();
+      if (!compat.supported) {
+        showError(compat.message);
+        store.updateSettings({ voiceEnabled: false });
+        syncController.setVoiceEnabled(false);
+      } else {
+        try {
+          await ttsManager.init(undefined, new AudioContext());
+        } catch (ttsErr) {
+          showError(ttsErr.message);
+          store.updateSettings({ voiceEnabled: false });
+          syncController.setVoiceEnabled(false);
+        }
+      }
+    }
+
     // Hide upload screen, show RSVP view
     upload.hide();
     rsvpView.show(doc);
@@ -197,6 +274,7 @@ async function handleFile(file) {
     showResumeBanner(fileHash, file.name);
   } catch (err) {
     console.error('Parse error:', err);
+    showError(err.message || 'Could not read this file. Try a different format.');
   }
 }
 

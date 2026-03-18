@@ -35,5 +35,13 @@ export async function parseFile(file) {
     throw new Error(`Unsupported file format: ${ext}`);
   }
 
-  return parser(file);
+  try {
+    return await parser(file);
+  } catch (err) {
+    // Re-throw errors that already have descriptive messages (from individual parsers)
+    if (err.message && err.message !== '') {
+      throw err;
+    }
+    throw new Error('Could not read this file. Try a different format.');
+  }
 }

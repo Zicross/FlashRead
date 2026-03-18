@@ -3,20 +3,49 @@ import ePub from 'epubjs';
 import { splitSentences } from './sentence-splitter.js';
 
 export async function parseEpub(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const book = ePub(arrayBuffer);
-  await book.ready;
+  let book;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    book = ePub(arrayBuffer);
+    await book.ready;
+  } catch (err) {
+    const msg = err?.message?.toLowerCase() ?? '';
+    const isDrm =
+      msg.includes('drm') ||
+      msg.includes('encrypted') ||
+      msg.includes('rights') ||
+      msg.includes('adept') ||
+      msg.includes('protection');
+    if (isDrm) {
+      throw new Error('This EPUB appears to be DRM-protected and cannot be opened.');
+    }
+    throw new Error('Could not read this file. Try a different format.');
+  }
 
   const spine = book.spine;
   let allText = '';
   let allHtml = '';
 
-  for (const item of spine.items) {
-    const doc = await item.load(book.load.bind(book));
-    const body = doc.querySelector('body') || doc.documentElement;
-    const text = body.textContent || '';
-    allText += text + ' ';
-    allHtml += body.innerHTML || '';
+  try {
+    for (const item of spine.items) {
+      const doc = await item.load(book.load.bind(book));
+      const body = doc.querySelector('body') || doc.documentElement;
+      const text = body.textContent || '';
+      allText += text + ' ';
+      allHtml += body.innerHTML || '';
+    }
+  } catch (err) {
+    const msg = err?.message?.toLowerCase() ?? '';
+    const isDrm =
+      msg.includes('drm') ||
+      msg.includes('encrypted') ||
+      msg.includes('rights') ||
+      msg.includes('adept') ||
+      msg.includes('protection');
+    if (isDrm) {
+      throw new Error('This EPUB appears to be DRM-protected and cannot be opened.');
+    }
+    throw new Error('Could not read this file. Try a different format.');
   }
 
   const words = allText.split(/\s+/).filter(Boolean);

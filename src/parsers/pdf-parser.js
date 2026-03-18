@@ -142,6 +142,11 @@ export async function parsePdf(file) {
     .join('\n\n');
 
   const words = fullText.split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) {
+    throw new Error('This PDF has no extractable text (it may be scanned or encrypted).');
+  }
+
   const sentences = splitSentences(fullText);
 
   const segments = [];

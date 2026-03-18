@@ -9,10 +9,15 @@ export class KokoroProvider {
 
   async init(onProgress, audioContext) {
     this.audioContext = audioContext;
-    this.model = await KokoroTTS.from_pretrained(
-      'onnx-community/Kokoro-82M-v1.0-ONNX',
-      { progress_callback: onProgress }
-    );
+    try {
+      this.model = await KokoroTTS.from_pretrained(
+        'onnx-community/Kokoro-82M-v1.0-ONNX',
+        { progress_callback: onProgress }
+      );
+    } catch (err) {
+      this.model = null;
+      throw new Error('Failed to load voice model. You can still read without voice.');
+    }
   }
 
   async generate(text) {
