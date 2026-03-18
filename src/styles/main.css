@@ -156,6 +156,7 @@ body::after {
   padding: var(--space-3) 0;
   gap: var(--space-2);
   z-index: 10;
+  overflow: hidden;
 }
 
 .content-area {
@@ -491,12 +492,15 @@ body::after {
   background-color: rgba(0, 0, 0, 0);
   z-index: 100;
   pointer-events: none;
-  transition: background-color var(--transition-slow);
+  visibility: hidden;
+  transition: background-color var(--transition-slow), visibility 0s var(--transition-slow);
 }
 
 .settings-overlay.open {
   background-color: rgba(0, 0, 0, 0.4);
   pointer-events: auto;
+  visibility: visible;
+  transition: background-color var(--transition-slow), visibility 0s;
 }
 
 .settings-panel {
