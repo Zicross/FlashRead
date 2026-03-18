@@ -11,6 +11,7 @@ import { TTSManager } from './tts/index.js';
 import { KokoroProvider } from './tts/kokoro-tts.js';
 import { OpenAIProvider } from './tts/openai-tts.js';
 import { SyncController } from './reader/sync-controller.js';
+import { computeFileHash } from './storage/file-hash.js';
 
 // ================================================================
 // Initialization
@@ -39,6 +40,10 @@ if (settings.openaiApiKey) {
 let engine = null;
 let rsvpView = null;
 let syncController = null;
+
+// Current file metadata (used for reading position persistence)
+let currentFileName = null;
+let currentFileHash = null;
 
 // ================================================================
 // Settings Panel
@@ -158,9 +163,22 @@ async function handleFile(file) {
     const doc = await parseFile(file);
     console.log('Parsed:', doc.metadata.title, doc.words.length, 'words');
 
+    // Compute file hash for persistence
+    const fileHash = await computeFileHash(file);
+    currentFileName = file.name;
+    currentFileHash = fileHash;
+
     // Create engine and controllers if not already created
     if (!engine) {
       engine = new RsvpEngine();
+
+      // Wrap engine.pause so every pause auto-saves reading position
+      const originalPause = engine.pause.bind(engine);
+      engine.pause = function (...args) {
+        originalPause(...args);
+        saveReadingPosition();
+      };
+
       syncController = new SyncController(engine, ttsManager);
       syncController.setVoiceEnabled(store.getSettings().voiceEnabled);
     }
@@ -174,7 +192,90 @@ async function handleFile(file) {
     upload.hide();
     rsvpView.show(doc);
     app.setMode('rsvp');
+
+    // Check for saved reading position and offer resume
+    showResumeBanner(fileHash, file.name);
   } catch (err) {
     console.error('Parse error:', err);
   }
 }
+
+// ================================================================
+// Resume banner
+// ================================================================
+
+function showResumeBanner(fileHash, fileName) {
+  const lastRead = store.getLastRead();
+  if (!lastRead || lastRead.fileHash !== fileHash || lastRead.wordIndex <= 0) return;
+
+  // Remove any stale banner
+  const existing = document.getElementById('resume-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'resume-banner';
+  banner.style.cssText = [
+    'position:absolute',
+    'top:var(--space-4)',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'background-color:var(--color-surface)',
+    'border:1px solid var(--color-border)',
+    'border-radius:var(--radius-lg)',
+    'padding:var(--space-3) var(--space-5)',
+    'display:flex',
+    'align-items:center',
+    'gap:var(--space-4)',
+    'box-shadow:var(--shadow-md)',
+    'z-index:50',
+    'white-space:nowrap',
+    'font-size:var(--text-sm)',
+    'color:var(--color-text-primary)',
+  ].join(';');
+
+  const msg = document.createElement('span');
+  msg.textContent = `Continue reading "${fileName}" from where you left off?`;
+
+  const yesBtn = document.createElement('button');
+  yesBtn.className = 'btn btn-primary';
+  yesBtn.textContent = 'Yes';
+  yesBtn.addEventListener('click', () => {
+    engine.jumpTo(lastRead.wordIndex);
+    banner.remove();
+  });
+
+  const noBtn = document.createElement('button');
+  noBtn.className = 'btn btn-ghost';
+  noBtn.textContent = 'No';
+  noBtn.addEventListener('click', () => {
+    store.clearLastRead();
+    banner.remove();
+  });
+
+  banner.appendChild(msg);
+  banner.appendChild(yesBtn);
+  banner.appendChild(noBtn);
+
+  // Content area needs position:relative for absolute child positioning
+  app.contentArea.style.position = 'relative';
+  app.contentArea.appendChild(banner);
+}
+
+// ================================================================
+// Reading position persistence
+// ================================================================
+
+function saveReadingPosition() {
+  if (!engine || engine.words.length === 0 || !currentFileHash) return;
+  store.saveLastRead({
+    fileName: currentFileName,
+    fileHash: currentFileHash,
+    wordIndex: engine.currentIndex,
+    timestamp: Date.now(),
+  });
+}
+
+// Save on page unload (localStorage.setItem is synchronous — safe in beforeunload)
+window.addEventListener('beforeunload', () => {
+  saveReadingPosition();
+});
