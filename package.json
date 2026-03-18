@@ -4,8 +4,22 @@
   "description": "A Rapid Serial Visual Presentation (RSVP) reader for PDFs",
   "main": "index.html",
   "scripts": {
-    "start": "vercel dev"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "epubjs": "^0.3.93",
+    "kokoro-js": "^1.2.1",
+    "mammoth": "^1.12.0",
+    "pdfjs-dist": "^5.5.207"
+  }
 }
