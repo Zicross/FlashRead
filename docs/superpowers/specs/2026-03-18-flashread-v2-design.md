@@ -36,6 +36,10 @@ All parsers return a common shape:
 
 The `segments` array provides the word-to-sentence mapping needed for TTS sync, document tracking highlighting, and sentence-level navigation (arrow keys). Given word index N, the current segment is the last segment where `startIndex <= N`.
 
+**Sentence splitting:** All parsers use a shared `src/parsers/sentence-splitter.js` utility. Rules: split on `.!?` followed by whitespace and an uppercase letter, but not after common abbreviations (Dr., Mr., Mrs., Ms., vs., etc., e.g., i.e., Jr., Sr., St., Prof., Inc., Ltd.). Ellipses (`...`) are treated as a single sentence-ending punctuation. This gives consistent sentence boundaries across all formats.
+
+**Word-index alignment:** The `html` output and `words[]` must be derived from the same extracted text. Parsers first extract plain text, split it into `words[]` and `segments[]`, then generate `html` from the same text source. `browse-view.js` wraps words in the HTML by tokenizing text nodes and matching sequentially against `words[]`, not by independently re-splitting.
+
 ### PDF (primary)
 - Parser: pdf.js
 - Extracts text per page with position data
@@ -65,37 +69,38 @@ The `segments` array provides the word-to-sentence mapping needed for TTS sync, 
 
 ```js
 {
-  init(onProgress)            // Load model or validate API key. onProgress(0-1) for download.
-  speak(text): Promise<void>  // Generate audio, play it, resolve when playback finishes
-  stop()                      // Cancel current generation + playback
-  getDuration(text): number   // Estimated duration in ms (from audio buffer after generation)
-  getVoices(): [{id, name}]   // Available voice options
-  setVoice(voiceId)           // Select a voice
-  isReady(): boolean          // Model loaded / key valid
+  init(onProgress)                              // Load model or validate API key. onProgress(0-1) for download.
+  generate(text): Promise<AudioBuffer>          // Generate audio, return buffer (no playback)
+  play(buffer): Promise<void>                   // Play an AudioBuffer, resolve on ended event
+  stop()                                        // Cancel current generation + playback
+  getVoices(): [{id, name}]                     // Available voice options
+  setVoice(voiceId)                             // Select a voice
+  isReady(): boolean                            // Model loaded / key valid
 }
 ```
 
-`speak()` is a high-level method. Internally each provider generates audio (streaming or batch), plays it via the Web Audio API (`AudioContext` + `AudioBufferSourceNode`), and resolves the promise when the `ended` event fires. `stop()` disconnects the source node and rejects the pending promise.
+The interface splits generation from playback so the sync controller can inspect `audioBuffer.duration` between steps. The sync controller calls `generate(text)`, reads the buffer duration to calculate per-word timing, then calls `play(buffer)` and starts RSVP advancement simultaneously. `stop()` cancels any in-flight generation and disconnects the active `AudioBufferSourceNode`.
 
 ### Audio Playback
 - All providers play audio through the Web Audio API (not `<audio>` elements)
-- Each provider creates an `AudioBufferSourceNode`, starts playback, and tracks the `ended` event
+- `AudioContext` must be created or resumed on first user interaction (play button click) to avoid browser autoplay restrictions
+- `play()` creates an `AudioBufferSourceNode`, starts playback, resolves when the `ended` event fires
 - `stop()` calls `sourceNode.stop()` and cleans up
-- This gives us precise playback duration from `audioBuffer.duration` for sync
+- Precise playback duration available from `audioBuffer.duration` before playback starts
 
 ### Kokoro (default, free)
 - 82M parameter model, runs in-browser via WASM (WebGPU where available)
 - ~80MB model download on first load
 - Cached automatically by Transformers.js via the browser Cache API — no custom caching needed
 - `init(onProgress)` wires into Transformers.js `from_pretrained` progress callback for download indicator
-- Internally uses `kokoro-js` streaming API (`tts.stream(splitter)`), collects audio chunks into a single `AudioBuffer`, then plays via Web Audio API
+- `generate()` uses `kokoro-js` streaming API (`tts.stream(splitter)`), collects audio chunks into a single `AudioBuffer` and returns it
 - Loading indicator required during model init (shows download progress on first load)
 
 ### OpenAI TTS (optional, paid)
-- Calls `tts-1` endpoint, receives audio response
+- Calls `tts-1` endpoint with `response_format: "mp3"`, receives audio response
+- `generate()` decodes MP3 response into `AudioBuffer` via `AudioContext.decodeAudioData()` and returns it
 - User provides API key in settings
 - API key stored in localStorage (with local-storage-only warning displayed in settings)
-- Decodes response into `AudioBuffer`, plays via Web Audio API
 - Lower latency, more voice options
 
 ## Sync Controller
@@ -109,11 +114,11 @@ Two operating modes:
 ### Voice-led (voice on)
 
 Sync algorithm:
-1. Send the current segment's sentence text to the TTS provider
-2. Once audio is generated (before playback starts), get the actual audio buffer duration via `audioBuffer.duration`
+1. Call `provider.generate(segment.sentence)` to get an `AudioBuffer`
+2. Read `audioBuffer.duration` to get precise sentence duration in seconds
 3. Calculate per-word interval: `duration / segment.wordCount`, weighted by character length (longer words get proportionally more time)
-4. Start audio playback and RSVP word advancement simultaneously
-5. At sentence boundary: wait for audio `ended` event, then advance to next segment. This re-syncs any drift every sentence.
+4. Call `provider.play(audioBuffer)` and start RSVP word advancement simultaneously at the same instant
+5. At sentence boundary: wait for `play()` promise to resolve (audio `ended`), then advance to next segment. This re-syncs any drift every sentence.
 6. If the user adjusts WPM mid-sentence while voice is on: the change takes effect at the next sentence boundary (current sentence completes at voice pace)
 7. If audio finishes before all words are shown: snap remaining words immediately. If words finish before audio: hold on last word until audio ends.
 
@@ -128,7 +133,7 @@ Sync algorithm:
 
 ### RSVP Mode
 - **Top 2/3**: Large centered word display, play/pause button, WPM control, progress bar
-- **Bottom 1/3**: Document tracking panel — current paragraph context in scrollable view, current sentence highlighted. Parsed text (not PDF render), flowing naturally.
+- **Bottom 1/3**: Document tracking panel — shows surrounding sentences (current segment and ~2 segments before/after) in a scrollable view, current sentence highlighted. Parsed text (not PDF render), flowing naturally. Uses `segments[]` as the display unit — no separate paragraph structure needed.
 
 ### Browse Mode
 - Full rendered document view (parser's `html` output)
@@ -197,6 +202,7 @@ src/
 ├── main.js                    # Entry point
 ├── parsers/
 │   ├── index.js               # Format detection + dispatch
+│   ├── sentence-splitter.js   # Shared sentence boundary detection
 │   ├── pdf-parser.js          # pdf.js with header/footer dedup
 │   ├── docx-parser.js         # mammoth
 │   ├── epub-parser.js         # epubjs (basic)
