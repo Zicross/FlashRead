@@ -126,6 +126,30 @@ app.onModeChange((mode) => {
 });
 
 // ================================================================
+// Keyboard shortcuts
+// ================================================================
+
+document.addEventListener('keydown', (e) => {
+  // Guard: only active when a document is loaded
+  if (!engine || engine.words.length === 0) return;
+
+  // Do not intercept when user is typing in an input field
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+  if (e.key === ' ') {
+    e.preventDefault(); // prevent page scroll
+    if (rsvpView) {
+      rsvpView._togglePlay();
+    }
+  } else if (e.key === 'ArrowRight') {
+    engine.nextSentence();
+  } else if (e.key === 'ArrowLeft') {
+    engine.prevSentence();
+  }
+});
+
+// ================================================================
 // File handling
 // ================================================================
 
