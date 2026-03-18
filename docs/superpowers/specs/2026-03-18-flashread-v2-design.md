@@ -19,7 +19,13 @@ All parsers return a common shape:
 ```js
 {
   words: string[],        // Flat word array for RSVP
-  sentences: string[],    // Sentence array for TTS chunking
+  segments: [             // Sentences with word index mapping
+    {
+      sentence: string,          // Full sentence text
+      startIndex: number,        // Index into words[] where this sentence begins
+      wordCount: number          // Number of words in this sentence
+    }
+  ],
   metadata: {
     title: string,        // From document metadata or filename
     pageCount: number|null
@@ -28,10 +34,15 @@ All parsers return a common shape:
 }
 ```
 
+The `segments` array provides the word-to-sentence mapping needed for TTS sync, document tracking highlighting, and sentence-level navigation (arrow keys). Given word index N, the current segment is the last segment where `startIndex <= N`.
+
 ### PDF (primary)
 - Parser: pdf.js
 - Extracts text per page with position data
-- **Header/footer deduplication**: Two-pass approach. First pass scans top/bottom 12% of each page, builds frequency map of recurring text across 3+ consecutive pages. Second pass extracts all text excluding matches from the filter set. Handles page numbers, running headers, and running footers.
+- **Header/footer deduplication**: Two-pass approach:
+  1. First pass: scan text items in the top/bottom 12% of each page by Y-position. Build a frequency map of exact-match strings across all pages. Texts appearing on >40% of pages are marked as headers/footers. Even/odd page sets are checked independently to handle alternating left/right headers.
+  2. Page numbers: detected by position (bottom 5% of page, centered or right-aligned) and numeric content. Stripped regardless of frequency since they change every page.
+  3. Second pass: extract all text excluding matches from the filter set.
 - HTML output: page-by-page rendered content for browse mode
 
 ### DOCX
@@ -54,25 +65,37 @@ All parsers return a common shape:
 
 ```js
 {
-  init()              // Load model or validate API key
-  speak(text)         // Promise — resolves when utterance complete
-  stop()              // Cancel current speech
-  getVoices()         // Available voice options
-  setVoice(voiceId)   // Select a voice
-  isReady()           // Boolean — model loaded / key valid
+  init(onProgress)            // Load model or validate API key. onProgress(0-1) for download.
+  speak(text): Promise<void>  // Generate audio, play it, resolve when playback finishes
+  stop()                      // Cancel current generation + playback
+  getDuration(text): number   // Estimated duration in ms (from audio buffer after generation)
+  getVoices(): [{id, name}]   // Available voice options
+  setVoice(voiceId)           // Select a voice
+  isReady(): boolean          // Model loaded / key valid
 }
 ```
 
+`speak()` is a high-level method. Internally each provider generates audio (streaming or batch), plays it via the Web Audio API (`AudioContext` + `AudioBufferSourceNode`), and resolves the promise when the `ended` event fires. `stop()` disconnects the source node and rejects the pending promise.
+
+### Audio Playback
+- All providers play audio through the Web Audio API (not `<audio>` elements)
+- Each provider creates an `AudioBufferSourceNode`, starts playback, and tracks the `ended` event
+- `stop()` calls `sourceNode.stop()` and cleans up
+- This gives us precise playback duration from `audioBuffer.duration` for sync
+
 ### Kokoro (default, free)
 - 82M parameter model, runs in-browser via WASM (WebGPU where available)
-- ~80MB model download on first load, browser-cached after
-- ~200-500ms latency for first chunk, then streams
-- Loading indicator required during model init
+- ~80MB model download on first load
+- Cached automatically by Transformers.js via the browser Cache API — no custom caching needed
+- `init(onProgress)` wires into Transformers.js `from_pretrained` progress callback for download indicator
+- Internally uses `kokoro-js` streaming API (`tts.stream(splitter)`), collects audio chunks into a single `AudioBuffer`, then plays via Web Audio API
+- Loading indicator required during model init (shows download progress on first load)
 
 ### OpenAI TTS (optional, paid)
-- Calls `tts-1` endpoint, streams audio
+- Calls `tts-1` endpoint, receives audio response
 - User provides API key in settings
-- API key stored in localStorage (with local-storage-only warning)
+- API key stored in localStorage (with local-storage-only warning displayed in settings)
+- Decodes response into `AudioBuffer`, plays via Web Audio API
 - Lower latency, more voice options
 
 ## Sync Controller
@@ -84,10 +107,15 @@ Two operating modes:
 - Words advance at fixed interval derived from WPM
 
 ### Voice-led (voice on)
-- TTS speaks a sentence
-- RSVP highlights words proportionally across estimated sentence duration
-- TTS controls pace; WPM becomes a base speed reference
-- Not perfect word-level sync, but proportional approximation
+
+Sync algorithm:
+1. Send the current segment's sentence text to the TTS provider
+2. Once audio is generated (before playback starts), get the actual audio buffer duration via `audioBuffer.duration`
+3. Calculate per-word interval: `duration / segment.wordCount`, weighted by character length (longer words get proportionally more time)
+4. Start audio playback and RSVP word advancement simultaneously
+5. At sentence boundary: wait for audio `ended` event, then advance to next segment. This re-syncs any drift every sentence.
+6. If the user adjusts WPM mid-sentence while voice is on: the change takes effect at the next sentence boundary (current sentence completes at voice pace)
+7. If audio finishes before all words are shown: snap remaining words immediately. If words finish before audio: hold on last word until audio ends.
 
 ## UI Layout
 
@@ -104,8 +132,10 @@ Two operating modes:
 
 ### Browse Mode
 - Full rendered document view (parser's `html` output)
+- `browse-view.js` post-processes parser HTML to wrap each word in `<span data-word-index="N">` for click targeting
 - Scrollable, readable
-- Click any word/sentence to jump RSVP to that position
+- Click any word to jump RSVP to that word's position
+- Current sentence highlighted during RSVP playback
 
 ### Settings Panel (slide-out overlay)
 - **Reading**: WPM slider (100-1400, default 600), font size, half-bold toggle (off by default)
@@ -141,7 +171,7 @@ Key: `flashread:lastRead`
 ```js
 {
   fileName: "document.pdf",
-  fileHash: "abc123",       // Hash of first+last 1KB + file size
+  fileHash: "abc123",       // SHA-256 via crypto.subtle.digest of first+last 1KB + file size
   wordIndex: 1542,
   timestamp: 1710764400000
 }
@@ -177,8 +207,7 @@ src/
 │   └── openai-tts.js          # OpenAI TTS API
 ├── reader/
 │   ├── rsvp-engine.js         # Word display, timing, half-bold
-│   ├── sync-controller.js     # RSVP ↔ TTS orchestration
-│   └── text-chunker.js        # Sentence chunking for TTS
+│   └── sync-controller.js     # RSVP ↔ TTS orchestration
 ├── ui/
 │   ├── app-shell.js           # Sidebar, mode switching, layout
 │   ├── rsvp-view.js           # RSVP mode UI
@@ -192,9 +221,30 @@ src/
     └── main.css               # Styles, CSS custom properties
 ```
 
+## Build Configuration
+
+**npm scripts:**
+- `dev` — Vite dev server with HMR
+- `build` — Production build to `dist/`
+- `preview` — Preview production build locally
+
+**Vercel:** Use Vite framework preset (auto-detects `vite.config.js`, builds to `dist/`). Remove current manual `vercel.json` static config.
+
+**Fonts:** `'Inter', 'Segoe UI', system-ui, sans-serif` for RSVP display and UI. `'Georgia', serif` for document tracking and browse mode.
+
+**Scope:** Desktop-focused for v2. No mobile-specific layout work.
+
+## Error Handling
+
+- **Encrypted/image-only PDFs**: Detect when pdf.js returns zero text items. Show message: "This PDF has no extractable text (it may be scanned or encrypted)."
+- **Kokoro model download failure**: Show retry button with error message. Don't block the app — user can still read without voice.
+- **Browser compatibility**: Kokoro requires WASM. If WebGPU unavailable, fall back to WASM-only (slower but functional). If WASM unavailable, disable Kokoro option and show "Your browser doesn't support local TTS. Use OpenAI or read without voice."
+- **DRM EPUB**: epubjs will fail to extract. Show "This EPUB appears to be DRM-protected and cannot be opened."
+- **Parse failures**: Generic fallback for any parser: "Could not read this file. Try a different format."
+
 ## Dependencies
 - `pdfjs-dist` — PDF parsing
 - `mammoth` — DOCX parsing
 - `epubjs` — EPUB parsing
-- `kokoro-js` — Kokoro TTS (WASM/WebGPU)
+- `kokoro-js` — Kokoro TTS (WASM/WebGPU, uses Transformers.js internally)
 - No UI framework
